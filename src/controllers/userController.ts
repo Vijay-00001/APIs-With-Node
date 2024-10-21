@@ -1,9 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
-import { CustomRequest } from '../middleware/authMiddleware';
 
 // Controller for fetching user profile
-export const getProfile: any = async (
-   req: CustomRequest,
+export const getDashboard: any = async (
+   req: Request,
    res: Response,
    next: NextFunction
 ): Promise<void> => {

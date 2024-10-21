@@ -1,30 +1,13 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import nodemailer from 'nodemailer';
 import User, { IUser } from '../models/userModels';
 import VerificationToken, {
    IVerificationToken,
 } from '../models/verificationTokenModel';
 import { generateToken } from '../config/jwt';
 import Session, { ISession } from '../models/sessionModel';
-import dns from 'dns';
-
-// Configure nodemailer for email sending
-const transporter = nodemailer.createTransport({
-   // host: 'smtp.ethereal.email',
-   // port: 587,
-   // auth: {
-   //    user: process.env.EMAIL_USER as string,
-   //    pass: process.env.EMAIL_PASS as string,
-   // },
-   host: 'smtp.ethereal.email',
-   port: 587,
-   auth: {
-      user: 'veronica85@ethereal.email',
-      pass: 'uysYSec7MAePMyZbMt',
-   },
-});
+import { sendVerificationEmail } from '../utils/sendVerificationEmail';
 
 // Register a new user
 export const register: any = async (
@@ -42,16 +25,60 @@ export const register: any = async (
          const existingVerificationToken: IVerificationToken | null =
             await VerificationToken.findOne({ identifier: email });
 
-         if (
-            existingVerificationToken &&
-            existingVerificationToken.expires > new Date()
-         ) {
-            return res.status(400).json({
-               error: 'User already registered and verification email already sent. Please check your inbox.',
+         // Check if the user is soft deleted
+         if (existingUser.isDeleted) {
+            const now = new Date();
+            const mailResendWindow = 60 * 60 * 1000; // 1 hour in milliseconds
+            const mailSentLimit = 3;
+
+            // Ensure that we track when the email was last sent and how many times
+            if (!existingUser.lastMailSent || !existingUser.mailSentCount) {
+               existingUser.lastMailSent = now;
+               existingUser.mailSentCount = 0;
+            }
+
+            // Check if the last email sent was within the time window
+            if (
+               now.getTime() - existingUser.lastMailSent.getTime() >
+               mailResendWindow
+            ) {
+               // Reset the counter after the window expires
+               existingUser.mailSentCount = 0;
+            }
+
+            // Check if the user has exceeded the email resend limit
+            if (existingUser.mailSentCount >= mailSentLimit) {
+               return res.status(429).json({
+                  error: 'You have exceeded the maximum number of email resends. Please try again later.',
+               });
+            }
+
+            // Resend the verification email if the limit has not been reached
+            const verificationToken: string = crypto
+               .randomBytes(32)
+               .toString('hex');
+            const expires: Date = new Date();
+            expires.setHours(expires.getHours() + 1); // Token valid for 1 hour
+
+            await VerificationToken.findOneAndUpdate(
+               { identifier: email },
+               { token: verificationToken, expires },
+               { upsert: true }
+            );
+
+            await sendVerificationEmail(existingUser, verificationToken);
+
+            // Update the user's mailSentCount and lastMailSent timestamp
+            existingUser.mailSentCount += 1;
+            existingUser.lastMailSent = now;
+            await existingUser.save();
+
+            return res.status(200).json({
+               message: 'Verification email resent. Please check your inbox.',
             });
          }
 
-         // If the email is not verified, resend the verification email
+         // If the user is not deleted, but email is not verified
          if (!existingUser.emailVerified) {
             const verificationToken: string = crypto
                .randomBytes(32)
@@ -71,13 +98,7 @@ export const register: any = async (
                { upsert: true }
             );
 
-            const verificationUrl: string = `http://localhost:3000/api/auth/verify-email?token=${verificationToken}`;
-            await transporter.sendMail({
-               from: 'owner@example.email',
-               to: existingUser.email,
-               subject: 'Resend: Verify your email address',
-               html: `<p>Please verify your email by clicking on the following link: <a href="${verificationUrl}">Verify Email</a></p>`,
-            });
+            await sendVerificationEmail(existingUser, verificationToken);
 
             return res.status(200).json({
                message: 'Verification email resent. Please check your inbox.',
@@ -98,6 +119,7 @@ export const register: any = async (
          email,
          password: hashedPassword,
          role: 'USER',
+         isDeleted: true, // Mark the account as soft deleted until email verification
       });
 
       await user.save();
@@ -116,13 +138,7 @@ export const register: any = async (
       await newVerificationToken.save();
 
       // Send verification email
-      const verificationUrl: string = `http://localhost:3000/api/auth/verify-email?token=${verificationToken}`;
-      await transporter.sendMail({
-         from: 'owner@example.email',
-         to: user.email,
-         subject: 'Verify your email address',
-         html: `<p>Please verify your email by clicking on the following link: <a href="${verificationUrl}">Verify Email</a></p>`,
-      });
+      await sendVerificationEmail(existingUser, verificationToken);
 
       res.status(201).json({
          message: 'User registered. Verification email sent.',
@@ -161,6 +177,7 @@ export const verifyEmail = async (
       }
 
       user.emailVerified = true;
+      user.isDeleted = false; // Activate the account by marking it as not deleted
       await user.save();
 
       await VerificationToken.deleteOne({ token: token as string });
@@ -181,9 +198,9 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
    try {
       // Find the user by email
-      const user: IUser | null = await User.findOne({ email });
+      const user = await User.findOne({ email });
 
-      // If the user is not found or the password is incorrect
+      // If user not found or password incorrect
       if (!user || !(await bcrypt.compare(password, user.password))) {
          res.status(401).json({ error: 'Invalid credentials' });
          return;
@@ -197,28 +214,46 @@ export const login = async (req: Request, res: Response): Promise<void> => {
          return;
       }
 
-      // Generate a session token (JWT or another form of token)
-      const sessionToken = generateToken({
-         _id: user._id.toString(),
-         role: user.role,
-      });
+      // Check if a session exists for the user
+      let session = await Session.findOne({ userId: user._id });
 
-      // Set expiration date for the session (e.g., 24 hours)
-      const expires = new Date();
-      expires.setHours(expires.getHours() + 24);
+      const currentDateTime = new Date();
 
-      // Create a new session
-      const session: ISession = new Session({
-         sessionToken,
-         userId: user._id,
-         expires,
-      });
+      // If session exists but expired, remove the old session
+      if (session && session.expires < currentDateTime) {
+         await Session.findByIdAndDelete(session._id); // Delete expired session
+         session = null; // Set session to null to create a new one
+      }
 
-      await session.save();
+      // If no session exists, create a new session
+      if (!session) {
+         // Generate a session token (JWT or another form of token)
+         const sessionToken = generateToken({
+            _id: user._id.toString(),
+            role: user.role,
+         });
+
+         // Set expiration date for the session (e.g., 24 hours)
+         const expires = new Date();
+         expires.setHours(expires.getHours() + 24);
+
+         // Create a new session
+         session = new Session({
+            sessionToken,
+            userId: user._id,
+            expires,
+         });
+
+         await session.save();
+      }
+
+      // Update the user's last login time
+      user.lastLoginAt = currentDateTime;
+      await user.save();
 
       // Respond with the session token and user data
       res.status(200).json({
-         token: sessionToken,
+         token: session.sessionToken,
          user: {
             _id: user._id,
             name: user.name,
@@ -231,5 +266,45 @@ export const login = async (req: Request, res: Response): Promise<void> => {
    } catch (error) {
       // Handle login failure
       res.status(500).json({ error: 'Login failed', details: error });
+   }
+};
+
+// Controller for user logout
+export const logout: any = async (
+   req: Request,
+   res: Response
+): Promise<void | any> => {
+   try {
+      // Get the session token from the request (usually from the authorization header or cookies)
+      const sessionToken = req.headers.authorization?.split(' ')[1]; // If using Bearer token format
+
+      if (!sessionToken) {
+         return res.status(400).json({ message: 'No session token provided' });
+      }
+
+      // Find the session
+      const session = await Session.findOne({ sessionToken });
+
+      if (!session) {
+         return res.status(404).json({ message: 'Session not found' });
+      }
+
+      // Update the user's lastLogoutAt field
+      const user = await User.findById(session.userId);
+      if (user) {
+         user.lastLogoutAt = new Date(); // Set current date and time for last logout
+         await user.save(); // Save the updated user document
+      }
+
+      // Delete the session
+      await Session.findOneAndDelete({ sessionToken });
+
+      // Respond with a success message
+      res.status(200).json({ message: 'Logout successful' });
+   } catch (error) {
+      res.status(500).json({
+         error: 'Failed to logout user',
+         details: error,
+      });
    }
 };

@@ -1,7 +1,27 @@
-import app from './app';
+import cluster from 'cluster';
+import os from 'os';
+import app from './app'; // Your express app
+import http from 'http';
 
-const PORT = process.env.PORT || 3000;
+if (cluster.isMaster) {
+   const numCPUs = os.cpus().length;
 
-app.listen(PORT, () => {
-   console.log(`Server running on port ${PORT}`);
-});
+   console.log(`Master process is running with PID: ${process.pid}`);
+
+   // Fork workers.
+   for (let i = 0; i < numCPUs; i++) {
+      cluster.fork();
+   }
+
+   cluster.on('exit', (worker, code, signal) => {
+      console.log(`Worker ${worker.process.pid} died`);
+      cluster.fork(); // Restart the worker
+   });
+} else {
+   // Workers can share the TCP connection
+   const server = http.createServer(app);
+
+   server.listen(process.env.PORT || 5000, () => {
+      console.log(`Worker process started with PID: ${process.pid}`);
+   });
+}

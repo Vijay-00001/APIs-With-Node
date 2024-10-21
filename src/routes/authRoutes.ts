@@ -1,6 +1,11 @@
 import express from 'express';
-import { register, login, verifyEmail } from '../controllers/authController';
-import { getProfile } from '../controllers/userController';
+import {
+   register,
+   login,
+   verifyEmail,
+   logout,
+} from '../controllers/authController';
+import { getDashboard } from '../controllers/userController';
 import { protect } from '../middleware/authMiddleware';
 
 const router = express.Router();
@@ -12,6 +17,7 @@ router.get('/verify-email', verifyEmail);
 router.post('/login', login);
 
 // Protected route for user profile
-router.get('/profile', protect, getProfile);
+router.get('/logout', protect, logout);
+router.get('/dashboard', protect, getDashboard);
 
 export default router;
