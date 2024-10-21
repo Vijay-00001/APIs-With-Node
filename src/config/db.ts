@@ -5,13 +5,8 @@ export interface IDBConfig {
 }
 
 const connectDB: any = async ({ mongoURL }: IDBConfig): Promise<void> => {
-   const options: any = {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-   };
-
    try {
-      await mongoose.connect(mongoURL, options);
+      await mongoose.connect(mongoURL);
       console.log('MongoDB connected');
    } catch (err) {
       console.error('MongoDB connection error:', err);
