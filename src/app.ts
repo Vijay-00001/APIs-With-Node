@@ -76,16 +76,16 @@ app.use(compression()); // Compress responses to reduce payload size
 // Basic request logging
 app.use(morgan('combined')); // Log requests to the console for better tracking
 
-// Setup database connection
-const dbConfig: IDBConfig = {
-   mongoURL: process.env.MONGO_URL || '',
-};
-
 // Schedule a job to clean expired sessions every minute
 cron.schedule('* * * * *', async () => {
    await cleanExpiredSessions();
    console.log('Session cleanup job ran');
 });
+
+// Setup database connection
+const dbConfig: IDBConfig = {
+   mongoURL: process.env.MONGO_URL || '',
+};
 
 // Connect to MongoDB
 connectDB(dbConfig)

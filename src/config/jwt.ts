@@ -1,4 +1,5 @@
 import jwt, { JwtPayload } from 'jsonwebtoken';
+import { decryptData, encryptData } from '../utils/security';
 
 export interface ITokenPayload extends JwtPayload {
    id: string;
@@ -8,13 +9,23 @@ export interface ITokenPayload extends JwtPayload {
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
 
 export const generateToken = (user: { _id: string; role: string }): string => {
-   return jwt.sign(
+   const jwtToken = jwt.sign(
       { id: user._id, role: user.role } as ITokenPayload,
       JWT_SECRET,
       { expiresIn: '1d' } // Token expires in 1 day
    );
+
+   const token = encryptData(jwtToken);
+
+   return token;
 };
 
 export const verifyToken = (token: string): ITokenPayload => {
-   return jwt.verify(token, JWT_SECRET) as ITokenPayload;
+   if (!token) {
+      throw new Error('No token provided');
+   }
+
+   const decryptedToken = decryptData(token);
+
+   return jwt.verify(decryptedToken, JWT_SECRET) as ITokenPayload;
 };

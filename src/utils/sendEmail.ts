@@ -10,8 +10,8 @@ const transporter = nodemailer.createTransport({
    host: 'smtp.ethereal.email',
    port: 587,
    auth: {
-      user: 'carlotta.ullrich@ethereal.email',
-      pass: 'WG7Vzhcj98mCkcJvD4',
+      user: 'darren81@ethereal.email',
+      pass: 'RBm7nS7R6BN47NF1JY',
    },
 });
 
@@ -27,7 +27,7 @@ export const sendVerificationEmail: any = async (
    const verificationUrl = `${process.env.BASE_URL}/verify-email?token=${token}`;
 
    const mailOptions = {
-      from: 'owner@example.email',
+      from: process.env.EMAIL_USER,
       to: user.email,
       subject: 'Verify your email address',
       html: `<p>Please verify your email by clicking on the following link: <a href="${verificationUrl}">Verify Email</a></p>`,
@@ -44,7 +44,7 @@ export const sendVerificationEmail: any = async (
 
 // utils/sendResetPasswordEmail.ts
 export const sendResetPasswordEmail = async (user: IUser, token: string) => {
-   const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+   const resetUrl = `${process.env.BASE_URL}/reset-password?token=${token}`;
 
    const mailOptions = {
       from: process.env.EMAIL_USER,
