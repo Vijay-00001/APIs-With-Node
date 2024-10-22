@@ -1,20 +1,17 @@
 import nodemailer from 'nodemailer';
 import { IUser } from '../models/userModels'; // Adjust this import path as needed
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 // Configure your email transporter (this is just an example, adjust accordingly)
 // Configure nodemailer for email sending
 const transporter = nodemailer.createTransport({
-   // host: 'smtp.ethereal.email',
-   // port: 587,
-   // auth: {
-   //    user: process.env.EMAIL_USER as string,
-   //    pass: process.env.EMAIL_PASS as string,
-   // },
    host: 'smtp.ethereal.email',
    port: 587,
    auth: {
-      user: 'veronica85@ethereal.email',
-      pass: 'uysYSec7MAePMyZbMt',
+      user: 'carlotta.ullrich@ethereal.email',
+      pass: 'WG7Vzhcj98mCkcJvD4',
    },
 });
 
@@ -42,5 +39,26 @@ export const sendVerificationEmail: any = async (
    } catch (error) {
       console.error('Error sending verification email:', error);
       throw new Error('Error sending verification email');
+   }
+};
+
+// utils/sendResetPasswordEmail.ts
+export const sendResetPasswordEmail = async (user: IUser, token: string) => {
+   const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+
+   const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: user.email,
+      subject: 'Password Reset Request',
+      html: `<p>You requested a password reset. Click the link below to reset your password:</p>
+             <p><a href="${resetUrl}">${resetUrl}</a></p>
+             <p>This link will expire in 1 hour.</p>`,
+   };
+
+   try {
+      await transporter.sendMail(mailOptions);
+   } catch (error) {
+      console.error('Error sending password reset email:', error);
+      throw new Error('Error sending password reset email');
    }
 };

@@ -4,6 +4,8 @@ import {
    login,
    verifyEmail,
    logout,
+   forgotPassword,
+   resetPassword,
 } from '../controllers/authController';
 import { getDashboard } from '../controllers/userController';
 import { protect } from '../middleware/authMiddleware';
@@ -15,6 +17,9 @@ router.post('/register', register);
 router.get('/verify-email', verifyEmail);
 
 router.post('/login', login);
+
+router.post('/forgot-password', forgotPassword);
+router.post('/reset-password', resetPassword);
 
 // Protected route for user profile
 router.get('/logout', protect, logout);

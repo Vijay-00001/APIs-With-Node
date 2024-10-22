@@ -6,8 +6,12 @@ import VerificationToken, {
    IVerificationToken,
 } from '../models/verificationTokenModel';
 import { generateToken } from '../config/jwt';
-import Session, { ISession } from '../models/sessionModel';
-import { sendVerificationEmail } from '../utils/sendVerificationEmail';
+import Session from '../models/sessionModel';
+import {
+   sendResetPasswordEmail,
+   sendVerificationEmail,
+} from '../utils/sendEmail';
+import ForgotToken from '../models/forgotTokenModel';
 
 // Register a new user
 export const register: any = async (
@@ -304,6 +308,123 @@ export const logout: any = async (
    } catch (error) {
       res.status(500).json({
          error: 'Failed to logout user',
+         details: error,
+      });
+   }
+};
+
+// Forgot Password
+export const forgotPassword: any = async (
+   req: Request,
+   res: Response
+): Promise<void | any> => {
+   const { email } = req.body;
+
+   try {
+      // Find the user by email
+      const user = await User.findOne({ email });
+
+      if (!user) {
+         return res.status(404).json({ error: 'User not found' });
+      }
+
+      // Check if email is verified
+      if (!user.emailVerified) {
+         // Assuming you have an `isVerified` field
+         return res.status(403).json({
+            error: 'Email is not verified. Please verify your email before requesting a password reset.',
+         });
+      }
+
+      // Check if lastLogout is less than lastLogin
+      if (user.lastLogoutAt <= user.lastLoginAt) {
+         return res.status(403).json({
+            error: 'You cannot request a password reset at this time.',
+         });
+      }
+
+      // Check if there is an active session for the user
+      const activeSession = await Session.findOne({
+         userId: user._id,
+         expires: { $gt: new Date() },
+      });
+
+      if (activeSession) {
+         return res.status(403).json({
+            error: 'You already have an active session. Please logout to request a password reset.',
+         });
+      }
+      // Generate a forgot token
+      const forgotToken = crypto.randomBytes(32).toString('hex');
+      const expiresAt = Date.now() + 3600000; // 1 hour from now
+
+      // Save the forgot token in the ForgotToken model
+      const tokenEntry = new ForgotToken({
+         userId: user._id,
+         token: forgotToken,
+         expiresAt: new Date(expiresAt),
+      });
+
+      await tokenEntry.save();
+
+      // Send reset password email
+      await sendResetPasswordEmail(user, forgotToken);
+
+      res.status(200).json({
+         message: 'Reset password email sent. Please check your inbox.',
+      });
+   } catch (error) {
+      res.status(500).json({
+         error: 'Error in processing your request',
+         details: error,
+      });
+   }
+};
+
+// Controller for resetting user password
+export const resetPassword: any = async (
+   req: Request,
+   res: Response
+): Promise<void | any> => {
+   const { newPassword } = req.body;
+   const { token } = req.query; // Get the token from request parameters
+
+   try {
+      console.log('token: ', token);
+
+      // Find the valid reset token
+      const resetTokenEntry = await ForgotToken.findOne({
+         token,
+      });
+
+      console.log('resetTokenEntry :', resetTokenEntry);
+
+      if (!resetTokenEntry) {
+         return res.status(400).json({ error: 'Invalid or expired token' });
+      }
+
+      // Find the user by ID
+      const user = await User.findById(resetTokenEntry.userId);
+
+      if (!user) {
+         return res.status(404).json({ error: 'User not found' });
+      }
+
+      // Hash the new password
+      user.password = await bcrypt.hash(newPassword, 10);
+      await user.save();
+
+      // Delete the reset token entry after use
+      await ForgotToken.deleteOne({ userId: user._id }); // Delete forgot token for the user
+
+      // Redirect to login URL (modify '/login' as needed for your application)
+      res.status(200).json({
+         message: 'Password has been reset successfully. You can now log in.',
+         redirectUrl: `${process.env.BASE_URL}/login`,
+      });
+   } catch (error) {
+      res.status(500).json({
+         error: 'Error resetting password',
          details: error,
       });
    }
