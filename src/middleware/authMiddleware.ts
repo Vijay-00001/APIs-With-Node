@@ -26,7 +26,7 @@ export const protect: any = async (
       // Check if the session exists
       const session = await Session.findOne({
          sessionToken: token,
-         userId: decoded._id,
+         userId: req.user.id,
       });
 
       if (!session) {
