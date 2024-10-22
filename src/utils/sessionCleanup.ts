@@ -6,9 +6,9 @@ export const cleanExpiredSessions = async () => {
    try {
       const now = new Date();
       // Delete all sessions that have expired
-      await Session.deleteMany({ expires: { $lt: now } });
+      await Session.deleteMany({ expiresAt: { $lt: now } });
       // Delete all verification tokens that have expired
-      await VerificationToken.deleteMany({ expires: { $lt: now } });
+      await VerificationToken.deleteMany({ expiresAt: { $lt: now } });
       // Delete all forgot password tokens that have expired
       await ForgotToken.deleteMany({ expiresAt: { $lt: now } });
       console.log(

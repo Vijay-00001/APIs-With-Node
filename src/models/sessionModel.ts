@@ -4,7 +4,7 @@ import { IUser } from './userModels'; // Import User interface if necessary
 export interface ISession extends Document {
    sessionToken: string;
    userId: string;
-   expires: Date;
+   expiresAt: Date;
    user: IUser;
 }
 
@@ -21,7 +21,7 @@ const sessionSchema: Schema = new Schema(
          ref: 'User', // Referencing the User model
          required: true,
       },
-      expires: {
+      expiresAt: {
          type: Date,
          required: true,
       },

@@ -24,7 +24,7 @@ export const sendVerificationEmail: any = async (
    user: IUser,
    token: string
 ): Promise<void> => {
-   const verificationUrl = `http://localhost:3000/api/auth/verify-email?token=${token}`;
+   const verificationUrl = `${process.env.BASE_URL}/verify-email?token=${token}`;
 
    const mailOptions = {
       from: 'owner@example.email',

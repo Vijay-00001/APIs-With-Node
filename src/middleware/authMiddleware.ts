@@ -6,6 +6,7 @@ interface CustomRequest extends Request {
    user?: any; // You can specify the user type if you have a User interface
 }
 
+// Middleware to protect routes
 export const protect: any = async (
    req: CustomRequest,
    res: Response,
@@ -27,6 +28,7 @@ export const protect: any = async (
       const session = await Session.findOne({
          sessionToken: token,
          userId: req.user.id,
+         expiresAt: { $gt: new Date() },
       });
 
       if (!session) {

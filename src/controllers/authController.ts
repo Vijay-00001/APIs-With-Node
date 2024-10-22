@@ -12,9 +12,10 @@ import {
    sendVerificationEmail,
 } from '../utils/sendEmail';
 import ForgotToken from '../models/forgotTokenModel';
+import { generateRandomSixDigitNumber } from '../utils/code';
 
 // Register a new user
-export const register: any = async (
+export const register = async (
    req: Request,
    res: Response
 ): Promise<void | any> => {
@@ -64,9 +65,15 @@ export const register: any = async (
             const expires: Date = new Date();
             expires.setHours(expires.getHours() + 1); // Token valid for 1 hour
 
+            const verificationCode = await generateRandomSixDigitNumber();
+
             await VerificationToken.findOneAndUpdate(
                { identifier: email },
-               { token: verificationToken, expires },
+               {
+                  token: verificationToken,
+                  code: verificationCode,
+                  expiresAt: expires,
+               },
                { upsert: true }
             );
 
@@ -79,6 +86,7 @@ export const register: any = async (
 
             return res.status(200).json({
                message: 'Verification email resent. Please check your inbox.',
+               verificationCode,
             });
          }
 
@@ -90,11 +98,16 @@ export const register: any = async (
             const expires: Date = new Date();
             expires.setHours(expires.getHours() + 1); // Token valid for 1 hour
 
+            const verificationCode = await generateRandomSixDigitNumber();
+
             const newVerificationToken = new VerificationToken({
                identifier: existingUser.email,
                token: verificationToken,
-               expires,
+               code: verificationCode,
+               expiresAt: expires,
             });
+
+            await newVerificationToken.save();
 
             await VerificationToken.findOneAndUpdate(
                { identifier: email },
@@ -106,6 +119,7 @@ export const register: any = async (
 
             return res.status(200).json({
                message: 'Verification email resent. Please check your inbox.',
+               verificationCode,
             });
          }
 
@@ -133,19 +147,28 @@ export const register: any = async (
       const expires: Date = new Date();
       expires.setHours(expires.getHours() + 1); // Token valid for 1 hour
 
+      const verificationCode = await generateRandomSixDigitNumber();
+
       const newVerificationToken: IVerificationToken = new VerificationToken({
          identifier: user.email,
          token: verificationToken,
-         expires,
+         code: verificationCode,
+         expiresAt: expires,
       });
 
       await newVerificationToken.save();
 
       // Send verification email
-      await sendVerificationEmail(existingUser, verificationToken);
+      try {
+         await sendVerificationEmail(user, verificationToken);
+      } catch (error) {
+         throw new Error('Error sending verification email');
+      }
 
       res.status(201).json({
-         message: 'User registered. Verification email sent.',
+         message:
+            'User registered. Verification email sent.Please check your inbox.',
+         verificationCode,
       });
    } catch (error) {
       res.status(400).json({
@@ -161,15 +184,23 @@ export const verifyEmail = async (
    res: Response
 ): Promise<void> => {
    const { token } = req.query;
+   const { verificationCode } = req.body;
 
    try {
       const verificationToken = await VerificationToken.findOne({
          token: token as string,
       });
 
-      if (!verificationToken || verificationToken.expires < new Date()) {
+      if (!verificationToken || verificationToken.expiresAt < new Date()) {
          res.status(400).json({
             error: 'Invalid or expired verification token',
+         });
+         return;
+      }
+
+      if (verificationToken.code !== verificationCode) {
+         res.status(400).json({
+            error: 'Invalid verification code',
          });
          return;
       }
@@ -186,8 +217,10 @@ export const verifyEmail = async (
 
       await VerificationToken.deleteOne({ token: token as string });
 
-      // Redirect the user to the login page after successful verification
-      res.redirect('/login'); // or whatever the login route is
+      res.status(200).json({
+         message: 'Email verified successfully. Redirecting...',
+         redirectUrl: `${process.env.BASE_URL}/login`, // or the appropriate login route
+      });
    } catch (error) {
       res.status(500).json({
          error: 'Email verification failed',
@@ -223,10 +256,12 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
       const currentDateTime = new Date();
 
-      // If session exists but expired, remove the old session
-      if (session && session.expires < currentDateTime) {
-         await Session.findByIdAndDelete(session._id); // Delete expired session
-         session = null; // Set session to null to create a new one
+      if (session) {
+         // If session exists but expired, remove the old session
+         if (session && session.expiresAt < currentDateTime) {
+            await Session.findByIdAndDelete(session._id); // Delete expired session
+            session = null; // Set session to null to create a new one
+         }
       }
 
       // If no session exists, create a new session
@@ -245,7 +280,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
          session = new Session({
             sessionToken,
             userId: user._id,
-            expires,
+            expiresAt: expires,
          });
 
          await session.save();
@@ -265,7 +300,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
             role: user.role,
          }, // Send user data without sensitive info
          message: 'Login successful. Redirecting...',
-         redirectUrl: '/dashboard', // Redirect URL
+         redirectUrl: `${process.env.BASE_URL}/dashboard`, // Redirect URL
       });
    } catch (error) {
       // Handle login failure
@@ -274,7 +309,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 };
 
 // Controller for user logout
-export const logout: any = async (
+export const logout = async (
    req: Request,
    res: Response
 ): Promise<void | any> => {
@@ -304,7 +339,10 @@ export const logout: any = async (
       await Session.findOneAndDelete({ sessionToken });
 
       // Respond with a success message
-      res.status(200).json({ message: 'Logout successful' });
+      res.status(200).json({
+         message: 'Logout successful',
+         redirectUrl: `${process.env.BASE_URL}/login`,
+      });
    } catch (error) {
       res.status(500).json({
          error: 'Failed to logout user',
@@ -314,7 +352,7 @@ export const logout: any = async (
 };
 
 // Forgot Password
-export const forgotPassword: any = async (
+export const forgotPassword = async (
    req: Request,
    res: Response
 ): Promise<void | any> => {
@@ -346,7 +384,7 @@ export const forgotPassword: any = async (
       // Check if there is an active session for the user
       const activeSession = await Session.findOne({
          userId: user._id,
-         expires: { $gt: new Date() },
+         expiresAt: { $gt: new Date() },
       });
 
       if (activeSession) {
@@ -382,7 +420,7 @@ export const forgotPassword: any = async (
 };
 
 // Controller for resetting user password
-export const resetPassword: any = async (
+export const resetPassword = async (
    req: Request,
    res: Response
 ): Promise<void | any> => {
@@ -390,14 +428,11 @@ export const resetPassword: any = async (
    const { token } = req.query; // Get the token from request parameters
 
    try {
-      console.log('token: ', token);
-
       // Find the valid reset token
       const resetTokenEntry = await ForgotToken.findOne({
          token,
+         expiresAt: { $gt: new Date() },
       });
-
-      console.log('resetTokenEntry :', resetTokenEntry);
 
       if (!resetTokenEntry) {
          return res.status(400).json({ error: 'Invalid or expired token' });

@@ -14,10 +14,8 @@ const router = express.Router();
 
 // Public routes
 router.post('/register', register);
-router.get('/verify-email', verifyEmail);
-
+router.post('/verify-email', verifyEmail);
 router.post('/login', login);
-
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
 
