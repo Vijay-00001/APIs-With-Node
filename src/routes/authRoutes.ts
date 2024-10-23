@@ -9,15 +9,38 @@ import {
 } from '../controllers/authController';
 import { getDashboard } from '../controllers/userController';
 import { protect } from '../middleware/authMiddleware';
+import { validateBodyRequest } from '../middleware/validateBodyRequest';
+import {
+   forgotPasswordValidation,
+   loginValidation,
+   registerValidation,
+   resetPasswordValidation,
+   verifyEmailValidation,
+} from '../validator/authValidator';
 
 const router = express.Router();
 
 // Public routes
-router.post('/register', register);
-router.post('/verify-email', verifyEmail);
-router.post('/login', login);
-router.post('/forgot-password', forgotPassword);
-router.post('/reset-password', resetPassword);
+router.post('/register', registerValidation, validateBodyRequest, register);
+router.post(
+   '/verify-email',
+   verifyEmailValidation,
+   validateBodyRequest,
+   verifyEmail
+);
+router.post('/login', loginValidation, validateBodyRequest, login);
+router.post(
+   '/forgot-password',
+   forgotPasswordValidation,
+   validateBodyRequest,
+   forgotPassword
+);
+router.post(
+   '/reset-password',
+   resetPasswordValidation,
+   validateBodyRequest,
+   resetPassword
+);
 
 // Protected route for user profile
 router.get('/logout', protect, logout);

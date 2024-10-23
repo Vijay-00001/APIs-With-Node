@@ -13,6 +13,7 @@ import {
 } from '../utils/sendEmail';
 import ForgotToken from '../models/forgotTokenModel';
 import { generateRandomSixDigitNumber } from '../utils/code';
+import { validationResult } from 'express-validator';
 
 // Register a new user
 export const register = async (
@@ -26,9 +27,8 @@ export const register = async (
       const existingUser: IUser | null = await User.findOne({ email });
 
       if (existingUser) {
-         // Check if the user has verified their email
-         const existingVerificationToken: IVerificationToken | null =
-            await VerificationToken.findOne({ identifier: email });
+         // remove all the verification tokens
+         await VerificationToken.deleteMany({ identifier: email });
 
          // Check if the user is soft deleted
          if (existingUser.isDeleted) {

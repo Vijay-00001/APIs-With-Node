@@ -1,17 +1,16 @@
 import nodemailer from 'nodemailer';
-import { IUser } from '../models/userModels'; // Adjust this import path as needed
+import { IUser } from '../models/userModels';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Configure your email transporter (this is just an example, adjust accordingly)
 // Configure nodemailer for email sending
 const transporter = nodemailer.createTransport({
    host: 'smtp.ethereal.email',
    port: 587,
    auth: {
-      user: 'darren81@ethereal.email',
-      pass: 'RBm7nS7R6BN47NF1JY',
+      user: 'alda.schultz48@ethereal.email',
+      pass: 'RPYV1B3kJU9kYm2qhj',
    },
 });
 
